@@ -1,6 +1,6 @@
 #!/usr/bin/python
 #Application for mechanical properties calculation and analysis using VASP
-#Zeyu Deng 26.05.2016
+#Zeyu Deng 23.06.2016
 
 import os
 import sys
@@ -23,7 +23,7 @@ def printInfo():
 # POSCAR
 poscar="POSCAR"
 # Files to copy to the calculation directories
-file_list=[poscar,"incar.1","incar.2","POTCAR","KPOINTS",'qjob']
+file_list=[poscar]
 
 def strain_pattern(crystSys,d):
 	if crystSys==1:#cubic -> e1+e4
