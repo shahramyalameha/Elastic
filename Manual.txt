@@ -1,0 +1,126 @@
+Mechanical Properties Calculation and Analysis Application Manual
+Author: Zeyu Deng (zd242@cam.ac.uk, dengzeyu@gmail.com)
+Department of Materials Science and Metallurgy
+University of Cambridge
+
+Update log:
+Ver 1.0.3 23.06.2016
+Add function: apply deformations read from "deformation.dat" and generate POSCARs
+
+Ver 1.0.2 06.06.2016
+Add function: calculate Young’s modulus for specific direction (theta, phi)
+
+Ver 1.0.1 26.06.2016
+Fix problem when preparing files for calculations
+
+
+
+Usage: 
+python elasticity.py [-h] [-n num_calcPoint] [-d delta] [-cy] [-cl] [-cm]
+                     [-no-cs] [-no-cp] [-p] [-no-cw]
+                     task_option crystal_system
+
+positional arguments:
+  task_option       Select task (required):
+                    1)  Calculation preparation
+                    2)  Extract data from DFT calculation and analysis
+                    3)  Read Cijs from cij.dat file and anaylsis
+                    4)  Read strain from pattern.dat and apply strain
+  crystal_system    Select crystal system (required):
+                    1)  Cubic
+                    2)  Tetragonal (4mm, -42m, 422, 4/mmm)
+                    21) Tetragonal (4, -4, 4/m)
+                    3)  Orthorhombic
+                    4)  Monoclinic (beta <> 90)
+                    41) Monoclinic (gamma <> 90)
+                    5)  Triclinic
+                    6)  Hexagonal
+                    7)  Trigonal (32, -3m, 3m)
+                    71) Trigonal (3, -3)
+
+optional arguments:
+  -h, --help        show this help message and exit
+  -n num_calcPoint  Number of calculation points per group of deformation (default: 4)
+  -e theta_and_phi  Calculate Young's Modulus along specific direction (theta, phi) (first theta then phi in degree)
+  -d delta          Magnitude of deformations intervals (default: 0.005 (0.5 percentage))
+  -cy               Analysis: Calculate directional Young's modulus
+  -cl               Analysis: Calculate directional linear compressiblity
+  -cm               Analysis: Find the maximum and minimum of directional elastic modulus
+  -no-cs            Disable Analysis: Check stability
+  -no-cp            Disable Analysis: Calculate polycrystalline elastic modulus
+  -p                Analysis: Print Cij
+  -no-cw            Disable Analysis: Write Cij to cij.dat
+
+
+
+Examples:
+Show help manual:
+$>python elasticity.py -h
+
+Prepare calculation files for VASP: 
+Orthorhombic system, 4 deformations: ±0.5% and ±1%          (0.5% should be typed as 0.005 same as 1%-> 0.01)
+$>python elasticity.py -n 4 -d 0.005 1 3
+Cubic system, 6 deformations: ±0.25%, ±0.5% and ±1%
+$>python elasticity.py -n 6 -d 0.0025 1 1
+
+Post processing and Analysis:
+Extract stress data from DFT calculation and analysis:
+Files must be stored as following path:
+In root path: (path which contains elasticity.py) should be folders for different strains:
+e.g. str1 str2 str3 …
+Under each strain folder should be folders for each deformations:
+e.g. str1/d0.005 str1/d-0.005  str2/d0.005 str2/d-0.005…
+Stress are obtained from outcar.2 file in deformation folder 
+e.g. str1/d0.005/outcar.2
+Zero deformation (0%) should be stored as:
+	e.g. rlx/outcar.2
+These rules can be changed by modifying the code
+
+Example:
+Orthorhombic system
+$>python elasticity.py 2 3
+Cubic system
+$>python elasticity.py 2 1
+
+Read Cijs from cij.dat file and analysis:
+Cijs must be stored as matrix form in a cij.dat file in the same path as elastics.py
+
+Example:
+Orthorhombic system
+$>python elasticity.py 3 3
+Cubic system
+$>python elasticity.py 3 1
+
+Disable or enable analysis:
+Enable calculation for directional Young’s Modulus, Linear compressibility and maximum& minimum elastic modulus analysis:
+Example:
+Orthorhombic system (using cij.dat file)
+$>python elasticity.py 3 3 -cy -cl -cm
+Cubic system (getting Cijs from calculated results)
+$>python elasticity.py 2 1 -cy -cl -cm
+
+Disable stability, polycrystalline elastic modulus and write Cijs to cij.dat
+Example:
+Orthorhombic system (using cij.dat file)
+$>python elasticity.py 3 3 -no-cs -no-cp -no-cw
+Cubic system (getting Cijs from calculated results)
+$>python elasticity.py 2 1 -no-cs -no-cp -no-cw
+
+Calculate Young’s modulus for specific direction (theta, phi)
+
+Example:
+Orthorhombic system (using cij.dat file) for theta=30° and phi=60°
+$>python elasticity.py 3 3 –e 30 –e 60
+Cubic system (getting Cijs from calculated results) for theta=15° and phi=20°
+$>python elasticity.py 2 1 –e 15 –e 20
+
+Apply strain read from "deformation.dat"
+
+Example:
+Want to apply strain [0.02 0 0 0 0 0] and [0.01 0.01 0 0 0 0]
+deformation.dat:
+0.02 0 0 0 0 0
+0.01 0.01 0 0 0 0
+Then
+$>python elasticity.py 4 1
+
