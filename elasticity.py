@@ -11,11 +11,11 @@ import argparse
 #import matplotlib.pyplot as plt
 ###################################################### Constants ######################################################
 # Info
-info_text="Mechanical Properties Calculation and Analysis Application ver 1.01\n"+\
+info_text="Mechanical Properties Calculation and Analysis Application ver 1.02\n"+\
 "Zeyu Deng <zd242@cam.ac.uk or dengzeyu@gmail.com>\n"+\
 "Department of Materials Science and Metallurgy\n"+\
 "University of Cambridge\n"+\
-"26.05.2016"
+"23.06.2016"
 
 def printInfo():
 	print info_text
