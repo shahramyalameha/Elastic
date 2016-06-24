@@ -1,6 +1,6 @@
 #!/usr/bin/python
 #Application for mechanical properties calculation and analysis using VASP
-#Zeyu Deng 23.06.2016
+#Zeyu Deng 24.06.2016
 
 import os
 import sys
@@ -11,11 +11,11 @@ import argparse
 #import matplotlib.pyplot as plt
 ###################################################### Constants ######################################################
 # Info
-info_text="Mechanical Properties Calculation and Analysis Application ver 1.02\n"+\
+info_text="Mechanical Properties Calculation and Analysis Application ver 1.04\n"+\
 "Zeyu Deng <zd242@cam.ac.uk or dengzeyu@gmail.com>\n"+\
 "Department of Materials Science and Metallurgy\n"+\
 "University of Cambridge\n"+\
-"23.06.2016"
+"24.06.2016"
 
 def printInfo():
 	print info_text
@@ -228,9 +228,10 @@ def readPoscar():
 		for j in range(3):
 			p[i][j]=float(lines[3+i-1].strip().split()[j])
 	print "POSCAR has been read!"
-	print "-----------Lattice Vector-------------"
+	print "\n-----------Lattice Vector-------------"
 	print scal
 	print p
+	print "--------------------------------------"
 	top=lines[0:2]
 	bot=lines[5:len(lines)]
 	return p,bot,top
@@ -272,11 +273,12 @@ def tran(mat):
 	return np.array(mat_tr)
 
 def apply_deform(p,deformation):
-	print "Deformation:"
+	print "\n-------------Deformation--------------"
 	print np.array(deformation)
 	pos=np.transpose(np.dot(deformation,np.transpose(p)))
-	print "Deformed structure:"
+	print "----------Deformed Structure----------"
 	print np.array(pos)
+	print "--------------------------------------"
 	return pos
 		
 ###################################################### Postprocessing Functions ######################################################
