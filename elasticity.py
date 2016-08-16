@@ -8,14 +8,14 @@ import shutil
 import subprocess
 import numpy as np
 import argparse
-#import matplotlib.pyplot as plt
+from itertools import product
 ###################################################### Constants ######################################################
 # Info
-info_text="Mechanical Properties Calculation and Analysis Application ver 1.04\n"+\
+info_text="Mechanical Properties Calculation and Analysis Application ver 1.05\n"+\
 "Zeyu Deng <zd242@cam.ac.uk or dengzeyu@gmail.com>\n"+\
 "Department of Materials Science and Metallurgy\n"+\
 "University of Cambridge\n"+\
-"24.06.2016"
+"16.08.2016"
 
 def printInfo():
 	print info_text
@@ -683,6 +683,7 @@ class elast_consts:
 		self.svoigt=np.linalg.inv(cvoigt)
 		self.smat=self.getSmat()
 		self.cmat=self.getCmat()
+		self.npt=arguments.npts
 		if arguments.isPrintCijs:
 			self.print_cvoigt()
 		if arguments.isCheckStability:
@@ -698,7 +699,12 @@ class elast_consts:
 			self.calc_dir_youngs_modulus()
 		if arguments.isCalcDirLinCompress:
 			self.calc_dir_lin_compress()
+		if arguments.isCalcDirShear:
+			self.calc_dir_shear_modulus()
+		if arguments.isCalcDirPoiRatio:
+			self.calc_dir_poisson_ratio()
 		self.show_dir_youngs_modulus(arguments.angles)
+
 		
 	def print_cvoigt(self):
 		print "\nSymmetrized Elastic Constant (C +- err) (GPa):"
@@ -715,21 +721,17 @@ class elast_consts:
 
 	def getSmat(self):
 		smat=np.zeros((3,3,3,3))
-		for i in range(3):
-			for j in range(3):
-				for k in range(3):
-					for l in range(3):
-						smat[i,j,k,l]=self.coeff(voigt_mat[i,j],voigt_mat[k,l])*self.svoigt[voigt_mat[i,j],voigt_mat[k,l]]
+		ranges = [range(3)] * 4
+		for i, j, k, l in product(*ranges):
+			smat[i,j,k,l]=self.coeff(voigt_mat[i,j],voigt_mat[k,l])*self.svoigt[voigt_mat[i,j],voigt_mat[k,l]]
 		return smat
 
 	def getCmat(self):
 		voigt_mat=np.array([[0,5,4],[5,1,3],[4,3,2]])
 		cmat=np.zeros((3,3,3,3))
-		for i in range(3):
-			for j in range(3):
-				for k in range(3):
-					for l in range(3):
-						cmat[i,j,k,l]=self.cvoigt[voigt_mat[i,j],voigt_mat[k,l]]
+		ranges = [range(3)] * 4
+		for i, j, k, l in product(*ranges):
+			cmat[i,j,k,l]=self.cvoigt[voigt_mat[i,j],voigt_mat[k,l]]
 		return cmat
 
 	def check_stability(self):
@@ -768,11 +770,9 @@ class elast_consts:
 		theta,phi = angles
 		a=self.a(theta,phi)
 		youngs_moduli=0
-		for i in range(3):
-			for j in range(3):
-				for k in range(3):
-					for l in range(3):
-						youngs_moduli+=a[i]*a[j]*a[k]*a[l]*self.smat[i,j,k,l]
+		ranges=[range(3)]*4
+		for i,j,k,l in product(*ranges):
+			youngs_moduli+=a[i]*a[j]*a[k]*a[l]*self.smat[i,j,k,l]
 		return 1.0/youngs_moduli
 
 	def show_dir_youngs_modulus(self,angles):
@@ -786,12 +786,149 @@ class elast_consts:
 		a=self.a(theta,phi)
 		b=self.b(theta,phi,chi)
 		shear_moduli=0
-		for i in range(3):
-			for j in range(3):
-				for k in range(3):
-					for l in range(3):
-						shear_moduli+=a[i]*a[k]*b[j]*b[l]*self.smat[i,j,k,l]	
+		ranges = [range(3)] * 4
+		for i, j, k, l in product(*ranges):
+			shear_moduli+=a[i]*a[k]*b[j]*b[l]*self.smat[i,j,k,l]
 		return 1.0/(4*shear_moduli)
+
+	def dir_poisson_ratio(self,angles):
+		theta,phi,chi = angles
+		a=self.a(theta,phi)
+		b=self.b(theta,phi,chi)
+		p_up=0
+		ranges = [range(3)] * 4
+		for i, j, k, l in product(*ranges):
+			p_up+=a[i]*a[j]*b[k]*b[l]*self.smat[i,j,k,l]
+		return -p_up*self.dir_youngs_moduli([theta,phi])
+
+	def dir_lin_compress(self,angles):
+		theta,phi=angles
+		a=self.a(theta,phi)
+		lin_compress=0
+		ranges = [range(3)] * 3
+		for i, j, k in product(*ranges):
+					lin_compress+=a[i]*a[j]*self.smat[i,j,k,k]
+		return lin_compress
+
+	def calc_dir_youngs_modulus(self):
+		npt=self.npt
+		print "\nCalculating directional Young's modulus for all directions....."
+		e=open("e.dat",'w')
+		p=np.linspace(0,2*np.pi,npt)
+		t=np.linspace(0,np.pi,npt)
+		ranges = [p, t]
+		for theta, phi in product(*ranges):
+			r=self.dir_youngs_moduli([theta,phi])
+			e.write("%6.4f %6.4f %6.4f %6.4f\n" % (r*np.sin(theta)*np.cos(phi),r*np.sin(theta)*np.sin(phi),r*np.cos(theta),r))
+		e.close()
+		print "\nCalculating projections of Young's modulus"
+		p=np.linspace(0,2*np.pi,npt)
+		t=np.linspace(0,2*np.pi,npt)
+		np.savetxt('e_xy.dat',np.c_[p,self.dir_youngs_moduli([np.pi/2,p])],delimiter='\t',fmt='%6.4f')
+		np.savetxt('e_yz.dat',np.c_[t,self.dir_youngs_moduli([t,np.pi/2])],delimiter='\t',fmt='%6.4f')
+		np.savetxt('e_xz.dat',np.c_[t,self.dir_youngs_moduli([t,0])],delimiter='\t',fmt='%6.4f')
+		print "Complete!"
+
+	def calc_dir_lin_compress(self):
+		npt=self.npt
+		print "\nCalculating directional linear compressibility for all directions....."
+		beta=open("beta.dat",'w')
+		p=np.linspace(0,2*np.pi,npt)
+		t=np.linspace(0,np.pi,npt)
+		for theta in t:
+			for phi in p:
+				r=self.dir_lin_compress([theta,phi])
+				beta.write("%6.4f %6.4f %6.4f %6.4f\n" % (r*np.sin(theta)*np.cos(phi),r*np.sin(theta)*np.sin(phi),r*np.cos(theta),r))
+			beta.write("\n")
+		beta.close()
+		print "Complete!"
+			
+	def calc_dir_shear_modulus(self):
+		npt=self.npt
+		print "\nCalculating directional shear modulus for all directions....."
+		g_max=open("g_max.dat",'w')
+		g_min=open("g_min.dat",'w')
+		g_average=open("g_average.dat",'w')
+		p=np.linspace(0,2*np.pi,npt)
+		t=np.linspace(0,np.pi,npt)
+		c=np.linspace(0,2*np.pi,npt)
+		ranges = [p,t]
+		for theta, phi in product(*ranges):
+			to_x=np.sin(theta)*np.cos(phi)
+			to_y=np.sin(theta)*np.sin(phi)
+			to_z=np.cos(theta)
+			r_this_tp=[]
+			for chi in c:
+				r_this_tp+=self.dir_shear_moduli([theta,phi,chi])
+			r_max=max(r_this_tp)
+			r_min=min(r_this_tp)
+			r_average=sum(r_this_tp)/len(r_this_tp)
+			g_max.write("%6.4f %6.4f %6.4f %6.4f\n" % (r_max*to_x,r_max*to_y,r_max*to_z,r_max))
+			g_min.write("%6.4f %6.4f %6.4f %6.4f\n" % (r_min*to_x,r_min*to_y,r_min*to_z,r_min))
+			g_average.write("%6.4f %6.4f %6.4f %6.4f\n" % (r_average*to_x,r_average*to_y,r_average*to_z,r_average))
+			print "one theta complete!"
+		g_max.close()
+		g_min.close()
+		g_average.close()
+		# #test ZIF-8 cij.dat:
+		# 9.52	 6.86	 6.86	 0.00	 0.00	 0.00
+ 		# 6.86	 9.52	 6.86	 0.00	 0.00	 0.00
+ 		# 6.86	 6.86	 9.52	 0.00	 0.00	 0.00
+ 		# 0.00	 0.00	 0.00	 0.97	 0.00	 0.00
+ 		# 0.00	 0.00	 0.00	 0.00	 0.97	 0.00
+ 		# 0.00	 0.00	 0.00	 0.00	 0.00	 0.97
+		# g_max=open("g_max_110.dat",'w')
+		# g_min=open("g_min_110.dat",'w')
+		# g_average=open("g_average_110.dat",'w')
+		# phi=np.pi/4
+		# for theta in np.linspace(0,2*np.pi,npt):
+		# 	to_x=np.sin(theta)*np.cos(phi)
+		# 	to_y=np.sin(theta)*np.sin(phi)
+		# 	to_z=np.cos(theta)
+		# 	r_this_tp=[]
+		# 	for chi in c:
+		# 		r_this_tp.append(self.dir_shear_moduli([theta,phi,chi]))
+		# 	r_max=max(r_this_tp)
+		# 	r_min=min(r_this_tp)
+		# 	r_average=sum(r_this_tp)/len(r_this_tp)
+		# 	g_max.write("%6.4f %6.4f\n" % (theta,r_max))
+		# 	g_min.write("%6.4f %6.4f\n" % (theta,r_min))
+		# 	g_average.write("%6.4f %6.4f\n" % (theta,r_average))
+		# g_max.close()
+		# g_min.close()
+		# g_average.close()
+		print "Complete!"
+
+	def calc_dir_poisson_ratio(self):
+		npt=self.npt
+		print "\nCalculating directional Poisson's ratio for all directions....."
+		v_max=open("v_max.dat",'w')
+		v_min=open("v_min.dat",'w')
+		v_average=open("v_average.dat",'w')
+		p=np.linspace(0,2*np.pi,npt)
+		t=np.linspace(0,np.pi,npt)
+		c=np.linspace(0,2*np.pi,npt)
+		for theta in t:
+			for phi in p:
+				to_x=np.sin(theta)*np.cos(phi)
+				to_y=np.sin(theta)*np.sin(phi)
+				to_z=np.cos(theta)
+				r_this_tp=[]
+				for chi in c:
+					r_this_tp+=self.dir_poisson_ratio([theta,phi,chi])
+				r_max=max(r_this_tp)
+				r_min=min(r_this_tp)
+				r_average=sum(r_this_tp)/len(r_this_tp)
+				v_max.write("%6.4f %6.4f %6.4f %6.4f\n" % (r_max*to_x,r_max*to_y,r_max*to_z,r_max))
+				v_min.write("%6.4f %6.4f %6.4f %6.4f\n" % (r_min*to_x,r_min*to_y,r_min*to_z,r_min))
+				v_average.write("%6.4f %6.4f %6.4f %6.4f\n" % (r_average*to_x,r_average*to_y,r_average*to_z,r_average))
+			v_max.write("\n")
+			v_min.write("\n")
+			v_average.write("\n")
+		v_max.close()
+		v_min.close()
+		v_average.close()
+		print "Complete!"
 
 	def minimum_elastic_moduli(self):
 		from scipy.optimize import minimize
@@ -820,61 +957,6 @@ class elast_consts:
 		print "Shear Modulus:  \t%6.2f\tat\t%6.2f\t%6.2f" % (self.dir_shear_moduli(shear_max),shear_max[0]*180/np.pi,shear_max[1]*180/np.pi)
 		print "Poisson's Ratio:\t%6.2f\tat\t%6.2f\t%6.2f" % (self.dir_poisson_ratio(poisson_max),poisson_max[0]*180/np.pi,poisson_max[1]*180/np.pi)
 
-	def dir_poisson_ratio(self,angles):
-		theta,phi,chi = angles
-		a=self.a(theta,phi)
-		b=self.b(theta,phi,chi)
-		p_up=0
-		p_down=0
-		for i in range(3):
-			for j in range(3):
-				for k in range(3):
-					for l in range(3):
-						p_up+=a[i]*a[j]*b[k]*b[l]*self.smat[i,j,k,l]
-		return -p_up*self.dir_youngs_moduli([theta,phi])
-
-	def dir_lin_compress(self,angles):
-		theta,phi=angles
-		a=self.a(theta,phi)
-		lin_compress=0
-		for i in range(3):
-			for j in range(3):
-				for k in range(3):
-					lin_compress+=a[i]*a[j]*self.smat[i,j,k,k]
-		return lin_compress
-
-	def calc_dir_youngs_modulus(self,npt=200):
-		print "\nCalculating Directional Young's Modulus Data....."
-		e=open("e.dat",'w')
-		p=np.linspace(0,2*np.pi,npt)
-		t=np.linspace(0,np.pi,npt)
-		for theta in t:
-			for phi in p:	
-				r=self.dir_youngs_moduli([theta,phi])
-				e.write("%6.4f %6.4f %6.4f %6.4f\n" % (r*np.sin(theta)*np.cos(phi),r*np.sin(theta)*np.sin(phi),r*np.cos(theta),r))
-			e.write("\n")
-		e.close()
-		print "\nCalculating projections of Young's Modulus"
-		p=np.linspace(0,2*np.pi,npt)
-		t=np.linspace(0,2*np.pi,npt)
-		np.savetxt('e_xy.dat',np.c_[p,self.dir_youngs_moduli([np.pi/2,p])],delimiter='\t',fmt='%6.4f')
-		np.savetxt('e_yz.dat',np.c_[t,self.dir_youngs_moduli([t,np.pi/2])],delimiter='\t',fmt='%6.4f')
-		np.savetxt('e_xz.dat',np.c_[t,self.dir_youngs_moduli([t,0])],delimiter='\t',fmt='%6.4f')
-		print "Complete!"
-
-	def calc_dir_lin_compress(self,npt=200):
-		print "\nCalculating Directional Linear Compressibility Data....."
-		beta=open("beta.dat",'w')
-		p=np.linspace(0,2*np.pi,npt)
-		t=np.linspace(0,np.pi,npt)
-		for theta in t:
-			for phi in p:
-				r=self.dir_lin_compress([theta,phi])
-				beta.write("%6.4f %6.4f %6.4f %6.4f\n" % (r*np.sin(theta)*np.cos(phi),r*np.sin(theta)*np.sin(phi),r*np.cos(theta),r))
-			beta.write("\n")
-		beta.close()
-		print "Complete!"
-			
 	def write_cvoigt(self):
 		np.savetxt('cij.dat',np.array(self.cvoigt),delimiter='\t',fmt='%5.2f')
 			
@@ -902,7 +984,7 @@ def main():
 		"1)  Calculation preparation\n"
 		"2)  Extract data from DFT calculation and analysis\n"
 		"3)  Read Cijs from cij.dat file and anaylsis\n"
-		"4)  Read strain from pattern.dat and apply strain")
+		"4)  Read strain from deformation.dat and apply strain")
 	options.add_argument(
 		dest='crystSys',action='store',type=int,metavar='crystal_system',
 		help="Select crystal system (required):\n"
@@ -920,6 +1002,9 @@ def main():
 		'-n',dest='num_calcPoint',action='store',type=int,metavar='num_calcPoint',default=4,
 		help="Number of calculation points per group of deformation (default: 4)")
 	options.add_argument(
+		'-npt',dest='npts',action='store',type=int,metavar='npts',default=200,
+		help="Number of calculation points for directional elastic modulus calculations (default: 200)")
+	options.add_argument(
 		'-e',dest='angles',action='append',metavar='theta_and_phi',default=[],
 		help="Calculate Young's Modulus along specific direction (theta, phi) (first theta then phi in degree)")
 	options.add_argument(
@@ -927,10 +1012,16 @@ def main():
 		help="Magnitude of deformations intervals (default: 0.005 (0.5 percentage))")
 	options.add_argument(
 		'-cy',dest='isCalcDirYoung',action='store_true',
-		help="Analysis: Calculate directional Young\'s modulus")
+		help="Analysis: Calculate directional Young\'s modulus for all directions")
 	options.add_argument(
 		'-cl',dest='isCalcDirLinCompress',action='store_true',
-		help="Analysis: Calculate directional linear compressiblity")
+		help="Analysis: Calculate directional linear compressiblity for all directions")
+	options.add_argument(
+		'-cg',dest='isCalcDirShear',action='store_true',
+		help="Analysis: Calculate directional Shear modulus for all directions")
+	options.add_argument(
+		'-cv',dest='isCalcDirPoiRatio',action='store_true',
+		help="Analysis: Calculate directional Poisson\'s ratio for all directions")
 	options.add_argument(
 		'-cm',dest='isCalcMaxMin',action='store_true',
 		help="Analysis: Find the maximum and minimum of directional elastic modulus")	
