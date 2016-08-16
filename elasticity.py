@@ -1,6 +1,5 @@
 #!/usr/bin/python
 #Application for mechanical properties calculation and analysis using VASP
-#Zeyu Deng 24.06.2016
 
 import os
 import sys
