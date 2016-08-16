@@ -4,6 +4,16 @@ Department of Materials Science and Metallurgy
 University of Cambridge
 
 Update log:
+Ver 1.0.5 16.08.2016
+Add functions to calculate directional Poisson’s ratio (-cv) and shear
+modulus (-cg) for all directions.
+
+Add functions to input the number of point for calculating elastic
+modulus (-npt)
+
+However, the efficiency of the code is not good. Optimizations are
+needed, recommend to use lower mesh, e.g. -npt 50
+
 Ver 1.0.3 23.06.2016
 Add function: apply deformations read from "deformation.dat" and generate POSCARs
 
@@ -15,17 +25,23 @@ Fix problem when preparing files for calculations
 
 
 
-Usage: 
-python elasticity.py [-h] [-n num_calcPoint] [-d delta] [-cy] [-cl] [-cm]
-                     [-no-cs] [-no-cp] [-p] [-no-cw]
+usage: elasticity.py [-h] [-n num_calcPoint] [-npt npts] [-e theta_and_phi]
+                     [-d delta] [-cy] [-cl] [-cg] [-cv] [-cm] [-no-cs]
+                     [-no-cp] [-p] [-no-cw]
                      task_option crystal_system
+
+Mechanical Properties Calculation and Analysis Application ver 1.05
+Zeyu Deng <zd242@cam.ac.uk or dengzeyu@gmail.com>
+Department of Materials Science and Metallurgy
+University of Cambridge
+16.08.2016
 
 positional arguments:
   task_option       Select task (required):
                     1)  Calculation preparation
                     2)  Extract data from DFT calculation and analysis
                     3)  Read Cijs from cij.dat file and anaylsis
-                    4)  Read strain from pattern.dat and apply strain
+                    4)  Read strain from deformation.dat and apply strain
   crystal_system    Select crystal system (required):
                     1)  Cubic
                     2)  Tetragonal (4mm, -42m, 422, 4/mmm)
@@ -41,10 +57,13 @@ positional arguments:
 optional arguments:
   -h, --help        show this help message and exit
   -n num_calcPoint  Number of calculation points per group of deformation (default: 4)
+  -npt npts         Number of calculation points for directional elastic modulus calculations (default: 200)
   -e theta_and_phi  Calculate Young's Modulus along specific direction (theta, phi) (first theta then phi in degree)
   -d delta          Magnitude of deformations intervals (default: 0.005 (0.5 percentage))
-  -cy               Analysis: Calculate directional Young's modulus
-  -cl               Analysis: Calculate directional linear compressiblity
+  -cy               Analysis: Calculate directional Young's modulus for all directions
+  -cl               Analysis: Calculate directional linear compressiblity for all directions
+  -cg               Analysis: Calculate directional Shear modulus for all directions
+  -cv               Analysis: Calculate directional Poisson's ratio for all directions
   -cm               Analysis: Find the maximum and minimum of directional elastic modulus
   -no-cs            Disable Analysis: Check stability
   -no-cp            Disable Analysis: Calculate polycrystalline elastic modulus
@@ -56,13 +75,13 @@ optional arguments:
 Examples:
 Show help manual:
 $>python elasticity.py -h
-
+================================================================================================================
 Prepare calculation files for VASP: 
 Orthorhombic system, 4 deformations: ±0.5% and ±1%          (0.5% should be typed as 0.005 same as 1%-> 0.01)
 $>python elasticity.py -n 4 -d 0.005 1 3
 Cubic system, 6 deformations: ±0.25%, ±0.5% and ±1%
 $>python elasticity.py -n 6 -d 0.0025 1 1
-
+================================================================================================================
 Post processing and Analysis:
 Extract stress data from DFT calculation and analysis:
 Files must be stored as following path:
@@ -81,7 +100,7 @@ Orthorhombic system
 $>python elasticity.py 2 3
 Cubic system
 $>python elasticity.py 2 1
-
+================================================================================================================
 Read Cijs from cij.dat file and analysis:
 Cijs must be stored as matrix form in a cij.dat file in the same path as elastics.py
 
@@ -98,14 +117,14 @@ Orthorhombic system (using cij.dat file)
 $>python elasticity.py 3 3 -cy -cl -cm
 Cubic system (getting Cijs from calculated results)
 $>python elasticity.py 2 1 -cy -cl -cm
-
+================================================================================================================
 Disable stability, polycrystalline elastic modulus and write Cijs to cij.dat
 Example:
 Orthorhombic system (using cij.dat file)
 $>python elasticity.py 3 3 -no-cs -no-cp -no-cw
 Cubic system (getting Cijs from calculated results)
 $>python elasticity.py 2 1 -no-cs -no-cp -no-cw
-
+================================================================================================================
 Calculate Young’s modulus for specific direction (theta, phi)
 
 Example:
@@ -113,7 +132,7 @@ Orthorhombic system (using cij.dat file) for theta=30° and phi=60°
 $>python elasticity.py 3 3 –e 30 –e 60
 Cubic system (getting Cijs from calculated results) for theta=15° and phi=20°
 $>python elasticity.py 2 1 –e 15 –e 20
-
+================================================================================================================
 Apply strain read from "deformation.dat"
 
 Example:
@@ -123,4 +142,49 @@ deformation.dat:
 0.01 0.01 0 0 0 0
 Then
 $>python elasticity.py 4 1
+================================================================================================================
+Calculate directional Poisson's ratio for all directions
+
+File name, description : format
+e.dat, 3D Young's modulus, : x,y,z,r (x,y,z is the coordinates and r is the Young's modulus)
+e_xy.dat (similar as yz,xz data), Young's modulus on xy (yz,xz) plane : angle,r (angle is the angles in the 2D plane, stated from x-axis for xy-plane (z-axis for yz and xz plane) and r is the Young's modulus)
+
+Example:
+Already have cijs in cij.dat (cubic) file and want to calculate directional Poisson's ratio
+
+$>python elasticity.py 3 1 -cy
+
+================================================================================================================
+Calculate directional Poisson's ratio for all directions
+
+File name, description : format
+v_max.dat, similar as e.dat file, but just obtain from the maximum value when changing the chi angle: format similar as e.dat
+v_min.dat, similar as e.dat file, but just obtain from the minimum value when changing the chi angle: format similar as e.dat
+v_average.dat, similar as e.dat file, but just obtain from the average value when changing the chi angle: format similar as e.dat
+
+Example:
+Already have cijs in cij.dat (cubic) file and want to calculate directional Poisson's ratio
+
+$>python elasticity.py 3 1 -cv
+================================================================================================================
+Calculate directional shear modulus for all directions
+
+File name, description : format
+g_max.dat, similar as e.dat file, but just obtain from the maximum value when changing the chi angle: format similar as e.dat
+g_min.dat, similar as e.dat file, but just obtain from the minimum value when changing the chi angle: format similar as e.dat
+g_average.dat, similar as e.dat file, but just obtain from the average value when changing the chi angle: format similar as e.dat
+
+Example:
+Already have cijs in cij.dat (cubic) file and want to calculate directional shear modulus
+
+$>python elasticity.py 3 1 -cg
+================================================================================================================
+Control the number of points for calculating elastic modulus
+
+Example:
+Already have cijs in cij.dat (cubic) file and want to calculate directional shear modulus with 50 points for theta, phi and chi
+
+$>python elasticity.py 3 1 -cg -npt 50
+
+
 
