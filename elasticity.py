@@ -10,11 +10,11 @@ import argparse
 from itertools import product
 ###################################################### Constants ######################################################
 # Info
-info_text="Mechanical Properties Calculation and Analysis Application ver 1.05\n"+\
+info_text="Mechanical Properties Calculation and Analysis Application ver 1.06\n"+\
 "Zeyu Deng <zd242@cam.ac.uk or dengzeyu@gmail.com>\n"+\
 "Department of Materials Science and Metallurgy\n"+\
 "University of Cambridge\n"+\
-"16.08.2016"
+"30.09.2016"
 
 def printInfo():
 	print info_text
@@ -703,6 +703,7 @@ class elast_consts:
 		if arguments.isCalcDirPoiRatio:
 			self.calc_dir_poisson_ratio()
 		self.show_dir_youngs_modulus(arguments.angles)
+		print self.smat.shape
 
 		
 	def print_cvoigt(self):
