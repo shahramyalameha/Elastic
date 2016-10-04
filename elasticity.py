@@ -8,13 +8,17 @@ import subprocess
 import numpy as np
 import argparse
 from itertools import product
+from time import time
+import matplotlib.pyplot as plt
+
+
 ###################################################### Constants ######################################################
 # Info
-info_text="Mechanical Properties Calculation and Analysis Application ver 1.06\n"+\
+info_text="Mechanical Properties Calculation and Analysis Application ver 1.07\n"+\
 "Zeyu Deng <zd242@cam.ac.uk or dengzeyu@gmail.com>\n"+\
 "Department of Materials Science and Metallurgy\n"+\
 "University of Cambridge\n"+\
-"30.09.2016"
+"04.10.2016"
 
 def printInfo():
 	print info_text
@@ -702,8 +706,9 @@ class elast_consts:
 			self.calc_dir_shear_modulus()
 		if arguments.isCalcDirPoiRatio:
 			self.calc_dir_poisson_ratio()
+		if arguments.isCalcDirYoungPlane:
+			self.calc_dir_shear_modulus_plane([1,0,0], [0,0,1])
 		self.show_dir_youngs_modulus(arguments.angles)
-		print self.smat.shape
 
 		
 	def print_cvoigt(self):
@@ -733,6 +738,9 @@ class elast_consts:
 		for i, j, k, l in product(*ranges):
 			cmat[i,j,k,l]=self.cvoigt[voigt_mat[i,j],voigt_mat[k,l]]
 		return cmat
+
+	def rotT(self,T, g):
+	    return np.einsum('ia,jb,kc,ld,abcd->ijkl', g, g, g, g, T)
 
 	def check_stability(self):
 		eigvals=np.linalg.eigvals(self.cvoigt)
@@ -781,25 +789,35 @@ class elast_consts:
 			angles_rad=[float(ang)*np.pi/180 for ang in angles]
 			print "Young's Modulus along theta = %5.2f, phi = %5.2f : E = %6.2f" % (angles[0],angles[1],self.dir_youngs_moduli(angles_rad))
 
-	def dir_shear_moduli(self,angles):
-		theta,phi,chi = angles
-		a=self.a(theta,phi)
-		b=self.b(theta,phi,chi)
-		shear_moduli=0
-		ranges = [range(3)] * 4
-		for i, j, k, l in product(*ranges):
-			shear_moduli+=a[i]*a[k]*b[j]*b[l]*self.smat[i,j,k,l]
-		return 1.0/(4*shear_moduli)
+	def dir_shear_moduli(self,angles):#return gmax,gmin,gaverage given theta,phi (chi is given internally, 200 pts from 0 to 2pi)
+		c=np.linspace(0,2*np.pi,100)
+		theta,phi = angles
+		shear_moduli=[]
+		for chi in c:
+			a=self.a(theta,phi)
+			b=self.b(theta,phi,chi)
+			s66_prime=0
+			ranges = [range(3)] * 4
+			s66_prime=np.einsum('i,j,k,l,abcd->ijkl',a,a,b,b,self.smat)
+			#for i, j, k, l in product(*ranges):
+			#	s66_prime+=a[i]*a[k]*b[j]*b[l]*self.smat[i,j,k,l]
+			shear_moduli+=[1.0/(4*s66_prime)]
+		shear_moduli=np.array(shear_moduli)
+		return np.amax(shear_moduli,axis=1),np.amin(shear_moduli,axis=1),np.sum(shear_moduli,axis=1)/np.ma.size(shear_moduli,axis=1)
 
 	def dir_poisson_ratio(self,angles):
-		theta,phi,chi = angles
-		a=self.a(theta,phi)
-		b=self.b(theta,phi,chi)
-		p_up=0
-		ranges = [range(3)] * 4
-		for i, j, k, l in product(*ranges):
-			p_up+=a[i]*a[j]*b[k]*b[l]*self.smat[i,j,k,l]
-		return -p_up*self.dir_youngs_moduli([theta,phi])
+		c=np.linspace(0,2*np.pi,100)
+		theta,phi = angles
+		poisson_ratio_tp=[]
+		for chi in c:
+			a=self.a(theta,phi)
+			b=self.b(theta,phi,chi)
+			p_up=0
+			ranges = [range(3)] * 4
+			for i, j, k, l in product(*ranges):
+				p_up+=a[i]*a[j]*b[k]*b[l]*self.smat[i,j,k,l]
+			poisson_ratio_tp+=[-p_up*self.dir_youngs_moduli([theta,phi])]
+		return [max(poisson_ratio_tp),min(poisson_ratio_tp),sum(poisson_ratio_tp)/len(poisson_ratio_tp)]
 
 	def dir_lin_compress(self,angles):
 		theta,phi=angles
@@ -821,13 +839,73 @@ class elast_consts:
 			r=self.dir_youngs_moduli([theta,phi])
 			e.write("%6.4f %6.4f %6.4f %6.4f\n" % (r*np.sin(theta)*np.cos(phi),r*np.sin(theta)*np.sin(phi),r*np.cos(theta),r))
 		e.close()
-		print "\nCalculating projections of Young's modulus"
-		p=np.linspace(0,2*np.pi,npt)
-		t=np.linspace(0,2*np.pi,npt)
-		np.savetxt('e_xy.dat',np.c_[p,self.dir_youngs_moduli([np.pi/2,p])],delimiter='\t',fmt='%6.4f')
-		np.savetxt('e_yz.dat',np.c_[t,self.dir_youngs_moduli([t,np.pi/2])],delimiter='\t',fmt='%6.4f')
-		np.savetxt('e_xz.dat',np.c_[t,self.dir_youngs_moduli([t,0])],delimiter='\t',fmt='%6.4f')
 		print "Complete!"
+
+	def normVect(self,vect):
+	    return (np.array(vect)/np.linalg.norm(vect))
+	
+	def skew(self,vector):
+		vector = np.array(vector)
+		return np.array([[0, -vector.item(2), vector.item(1)],
+		                     [vector.item(2), 0, -vector.item(0)],
+		                     [-vector.item(1), vector.item(0), 0]])
+	def getRotMat(self,a,b):
+	    a=self.normVect(a)
+	    b=self.normVect(b)
+	    v=np.cross(a,b)
+	    s=np.linalg.norm(v)
+	    c=np.dot(a,b)
+	    vx=self.skew(v)
+	    return np.identity(3)+vx+np.dot(vx,vx)*(1-c)/s**2
+
+	def rotSmat(self,vectProj,vectUp):
+		vectProj=self.normVect(vectProj)
+		vectUp=self.normVect(vectUp)
+		vectPlot=np.array([0,0,1])
+		#g rotation matrix from projection vector -> vector perpendicular to the plane for plotting
+		g=self.getRotMat(vectProj,vectPlot)
+		self.smat=self.rotT(self.smat,g)
+		b2=np.dot(g,vectUp)
+		#g2 rotation matrix from upward vector -> [0,1,0] (y-axis for plotting)
+		g2=self.getRotMat(b2,[0,1,0])
+		self.smat=self.rotT(self.smat,g2)
+
+	def calc_dir_youngs_modulus_plane(self,vectProj,vectUp):
+		#vectProj->projection vector
+		#vectUp->upward vector
+		#vectPlot->vector perpendicular to the plane for plotting [0,0,1]
+		npt=self.npt
+		print "\nCalculating projections of Young's modulus along ",vectProj,' vector'
+
+		self.rotSmat(vectProj,vectUp)
+		phi = np.linspace(0,2*np.pi,200)
+		y=self.dir_youngs_moduli([np.pi/2,phi])
+
+		ax = plt.subplot(111, projection='polar')
+		ax.plot(phi, y, color='r', linewidth=3)
+		
+		plt.legend()
+		
+		ax.grid(True)
+		plt.show()
+
+	def calc_dir_lin_compress_plane(self,vectProj,vectUp):
+		#vectProj->projection vector
+		#vectUp->upward vector
+		#vectPlot->vector perpendicular to the plane for plotting [0,0,1]
+		npt=self.npt
+		print "\nCalculating projections of Young's modulus along ",vectProj,' vector'
+		self.rotSmat(vectProj,vectUp)
+		
+		phi = np.linspace(0,2*np.pi,200)
+		beta=self.dir_lin_compress([np.pi/2,phi])
+
+		ax = plt.subplot(111, projection='polar')
+		ax.plot(phi, beta, color='r', linewidth=3)
+		
+		plt.legend()
+		ax.grid(True)
+		plt.show()
 
 	def calc_dir_lin_compress(self):
 		npt=self.npt
@@ -843,33 +921,40 @@ class elast_consts:
 		beta.close()
 		print "Complete!"
 			
-	def calc_dir_shear_modulus(self):
+	def calc_dir_shear_modulus_plane(self,vectProj,vectUp):		
+		#calculate shear modulus for all angles (theta,phi) -> time consuming! need optimisation
+		#g_max=open("g_max.dat",'w')
+		#g_min=open("g_min.dat",'w')
+		#g_average=open("g_average.dat",'w')
+		#ranges = [p,t]
+		#for theta, phi in product(*ranges):
+		#	to_x=np.sin(theta)*np.cos(phi)
+		#	to_y=np.sin(theta)*np.sin(phi)
+		#	to_z=np.cos(theta)
+		#	shear_moduli_tp=self.dir_shear_moduli([theta,phi])
+		#	r_max=shear_moduli_tp[0]
+		#	r_min=shear_moduli_tp[1]
+		#	r_average=shear_moduli_tp[2]
+		#	g_max.write("%6.4f %6.4f %6.4f %6.4f\n" % (r_max*to_x,r_max*to_y,r_max*to_z,r_max))
+		#	g_min.write("%6.4f %6.4f %6.4f %6.4f\n" % (r_min*to_x,r_min*to_y,r_min*to_z,r_min))
+		#	g_average.write("%6.4f %6.4f %6.4f %6.4f\n" % (r_average*to_x,r_average*to_y,r_average*to_z,r_average))
+		#g_max.close()
+		#g_min.close()
+		#g_average.close()
+		
 		npt=self.npt
-		print "\nCalculating directional shear modulus for all directions....."
-		g_max=open("g_max.dat",'w')
-		g_min=open("g_min.dat",'w')
-		g_average=open("g_average.dat",'w')
-		p=np.linspace(0,2*np.pi,npt)
-		t=np.linspace(0,np.pi,npt)
-		c=np.linspace(0,2*np.pi,npt)
-		ranges = [p,t]
-		for theta, phi in product(*ranges):
-			to_x=np.sin(theta)*np.cos(phi)
-			to_y=np.sin(theta)*np.sin(phi)
-			to_z=np.cos(theta)
-			r_this_tp=[]
-			for chi in c:
-				r_this_tp+=self.dir_shear_moduli([theta,phi,chi])
-			r_max=max(r_this_tp)
-			r_min=min(r_this_tp)
-			r_average=sum(r_this_tp)/len(r_this_tp)
-			g_max.write("%6.4f %6.4f %6.4f %6.4f\n" % (r_max*to_x,r_max*to_y,r_max*to_z,r_max))
-			g_min.write("%6.4f %6.4f %6.4f %6.4f\n" % (r_min*to_x,r_min*to_y,r_min*to_z,r_min))
-			g_average.write("%6.4f %6.4f %6.4f %6.4f\n" % (r_average*to_x,r_average*to_y,r_average*to_z,r_average))
-			print "one theta complete!"
-		g_max.close()
-		g_min.close()
-		g_average.close()
+		print "\nCalculating projections of Young's modulus along ",vectProj,' vector'
+		self.rotSmat(vectProj,vectUp)
+		phi = np.linspace(0,2*np.pi,200)
+		g_max,g_min,g_average =self.dir_shear_moduli([np.pi/2,phi])
+		ax = plt.subplot(111, projection='polar')
+		ax.plot(phi, g_max, color='r', linewidth=3)
+		ax.plot(phi, g_min, color='g', linewidth=3)
+		ax.plot(phi, g_average, color='b', linewidth=3)
+		plt.legend()
+		ax.grid(True)
+		plt.show()
+		
 		# #test ZIF-8 cij.dat:
 		# 9.52	 6.86	 6.86	 0.00	 0.00	 0.00
  		# 6.86	 9.52	 6.86	 0.00	 0.00	 0.00
@@ -902,32 +987,61 @@ class elast_consts:
 	def calc_dir_poisson_ratio(self):
 		npt=self.npt
 		print "\nCalculating directional Poisson's ratio for all directions....."
-		v_max=open("v_max.dat",'w')
-		v_min=open("v_min.dat",'w')
-		v_average=open("v_average.dat",'w')
 		p=np.linspace(0,2*np.pi,npt)
-		t=np.linspace(0,np.pi,npt)
-		c=np.linspace(0,2*np.pi,npt)
+		t=np.linspace(0,2*np.pi,npt)
+		#calculate Poisson's ratio for all angles (theta,phi) -> time consuming! need optimisation
+		#v_max=open("v_max.dat",'w')
+		#v_min=open("v_min.dat",'w')
+		#v_average=open("v_average.dat",'w')
+		#for theta, phi in product(*ranges):
+		#	to_x=np.sin(theta)*np.cos(phi)
+		#	to_y=np.sin(theta)*np.sin(phi)
+		#	to_z=np.cos(theta)
+		#	poisson_ratio_tp=self.dir_poisson_ratio([theta,phi])
+		#	r_max=poisson_ratio_tp[0]
+		#	r_min=poisson_ratio_tp[1]
+		#	r_average=poisson_ratio_tp[2]
+		#	v_max.write("%6.4f %6.4f %6.4f %6.4f\n" % (r_max*to_x,r_max*to_y,r_max*to_z,r_max))
+		#	v_min.write("%6.4f %6.4f %6.4f %6.4f\n" % (r_min*to_x,r_min*to_y,r_min*to_z,r_min))
+		#	v_average.write("%6.4f %6.4f %6.4f %6.4f\n" % (r_average*to_x,r_average*to_y,r_average*to_z,r_average))
+		#v_max.close()
+		#v_min.close()
+		#v_average.close()
+
+		v_max=[]
+		v_min=[]
+		v_average=[]
+		for phi in p:
+			poisson_ratio_tp=self.dir_poisson_ratio([np.pi/2,phi])
+			v_max+=[poisson_ratio_tp[0]]
+			v_min+=[poisson_ratio_tp[1]]
+			v_average+=[poisson_ratio_tp[2]]
+		np.savetxt('v_xy_max.dat',zip(p,v_max),delimiter='\t',fmt='%6.4f')
+		np.savetxt('v_xy_min.dat',zip(p,v_min),delimiter='\t',fmt='%6.4f')
+		np.savetxt('v_xy_average.dat',zip(p,v_average),delimiter='\t',fmt='%6.4f')
+		v_max=[]
+		v_min=[]
+		v_average=[]
 		for theta in t:
-			for phi in p:
-				to_x=np.sin(theta)*np.cos(phi)
-				to_y=np.sin(theta)*np.sin(phi)
-				to_z=np.cos(theta)
-				r_this_tp=[]
-				for chi in c:
-					r_this_tp+=self.dir_poisson_ratio([theta,phi,chi])
-				r_max=max(r_this_tp)
-				r_min=min(r_this_tp)
-				r_average=sum(r_this_tp)/len(r_this_tp)
-				v_max.write("%6.4f %6.4f %6.4f %6.4f\n" % (r_max*to_x,r_max*to_y,r_max*to_z,r_max))
-				v_min.write("%6.4f %6.4f %6.4f %6.4f\n" % (r_min*to_x,r_min*to_y,r_min*to_z,r_min))
-				v_average.write("%6.4f %6.4f %6.4f %6.4f\n" % (r_average*to_x,r_average*to_y,r_average*to_z,r_average))
-			v_max.write("\n")
-			v_min.write("\n")
-			v_average.write("\n")
-		v_max.close()
-		v_min.close()
-		v_average.close()
+			poisson_ratio_tp=self.dir_poisson_ratio([theta,np.pi/2])
+			v_max+=[poisson_ratio_tp[0]]
+			v_min+=[poisson_ratio_tp[1]]
+			v_average+=[poisson_ratio_tp[2]]
+		np.savetxt('v_yz_max.dat',zip(p,v_max),delimiter='\t',fmt='%6.4f')
+		np.savetxt('v_yz_min.dat',zip(p,v_min),delimiter='\t',fmt='%6.4f')
+		np.savetxt('v_yz_average.dat',zip(p,v_average),delimiter='\t',fmt='%6.4f')
+		v_max=[]
+		v_min=[]
+		v_average=[]
+		for theta in t:
+			poisson_ratio_tp=self.dir_poisson_ratio([theta,0])
+			v_max+=[poisson_ratio_tp[0]]
+			v_min+=[poisson_ratio_tp[1]]
+			v_average+=[poisson_ratio_tp[2]]
+		np.savetxt('v_xz_max.dat',zip(p,v_max),delimiter='\t',fmt='%6.4f')
+		np.savetxt('v_xz_min.dat',zip(p,v_min),delimiter='\t',fmt='%6.4f')
+		np.savetxt('v_xz_average.dat',zip(p,v_average),delimiter='\t',fmt='%6.4f')
+
 		print "Complete!"
 
 	def minimum_elastic_moduli(self):
@@ -1007,6 +1121,12 @@ def main():
 	options.add_argument(
 		'-e',dest='angles',action='append',metavar='theta_and_phi',default=[],
 		help="Calculate Young's Modulus along specific direction (theta, phi) (first theta then phi in degree)")
+	options.add_argument(
+		'-da',dest='angles',action='append',metavar='vectors',default=[],
+		help="Calculate Young's Modulus along specific direction (theta, phi) (first theta then phi in degree)")
+	options.add_argument(
+		'-cyd',dest='isCalcDirYoungPlane',action='store_true',
+		help="Analysis: Calculate directional Young\'s modulus for all directions")	
 	options.add_argument(
 		'-d',dest='delta',action='store',type=float,metavar='delta',default=0.005,
 		help="Magnitude of deformations intervals (default: 0.005 (0.5 percentage))")
