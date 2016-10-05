@@ -707,7 +707,7 @@ class elast_consts:
 		if arguments.isCalcDirPoiRatio:
 			self.calc_dir_poisson_ratio()
 		if arguments.isCalcDirYoungPlane:
-			self.calc_dir_shear_modulus_plane([1,0,0], [0,0,1])
+			self.calc_dir_youngs_modulus_plane([1,0,0], [0,0,1])
 		self.show_dir_youngs_modulus(arguments.angles)
 
 		
@@ -777,11 +777,17 @@ class elast_consts:
 	def dir_youngs_moduli(self,angles):
 		theta,phi = angles
 		a=self.a(theta,phi)
-		youngs_moduli=0
+		s11_prime=0
 		ranges=[range(3)]*4
 		for i,j,k,l in product(*ranges):
-			youngs_moduli+=a[i]*a[j]*a[k]*a[l]*self.smat[i,j,k,l]
-		return 1.0/youngs_moduli
+			s11_prime+=a[i]*a[j]*a[k]*a[l]*self.smat[i,j,k,l]
+		return 1.0/s11_prime
+
+	def dir_youngs_moduli2(self,angles):
+		print np.array(self.a(angles[0],angles[1]))
+		g=self.getRotMat(np.array(self.a(angles[0],angles[1])),[1,0,0])
+		s_prime=rotT(self.smat,g)
+		return 1.0/s_prime[1,1,1,1]
 
 	def show_dir_youngs_modulus(self,angles):
 		if len(angles) != 0:
@@ -798,7 +804,7 @@ class elast_consts:
 			b=self.b(theta,phi,chi)
 			s66_prime=0
 			ranges = [range(3)] * 4
-			s66_prime=np.einsum('i,j,k,l,abcd->ijkl',a,a,b,b,self.smat)
+			s66_prime=np.einsum('i,j,k,l,abcd->ijkl',a,b,a,b,self.smat)
 			#for i, j, k, l in product(*ranges):
 			#	s66_prime+=a[i]*a[k]*b[j]*b[l]*self.smat[i,j,k,l]
 			shear_moduli+=[1.0/(4*s66_prime)]
@@ -876,11 +882,11 @@ class elast_consts:
 		#vectPlot->vector perpendicular to the plane for plotting [0,0,1]
 		npt=self.npt
 		print "\nCalculating projections of Young's modulus along ",vectProj,' vector'
-
+		t0=time()
 		self.rotSmat(vectProj,vectUp)
 		phi = np.linspace(0,2*np.pi,200)
-		y=self.dir_youngs_moduli([np.pi/2,phi])
-
+		y=self.dir_youngs_moduli2([np.pi/2,phi])
+		print time()-t0
 		ax = plt.subplot(111, projection='polar')
 		ax.plot(phi, y, color='r', linewidth=3)
 		
