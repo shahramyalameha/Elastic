@@ -783,12 +783,6 @@ class elast_consts:
 			s11_prime+=a[i]*a[j]*a[k]*a[l]*self.smat[i,j,k,l]
 		return 1.0/s11_prime
 
-	def dir_youngs_moduli2(self,angles):
-		print np.array(self.a(angles[0],angles[1]))
-		g=self.getRotMat(np.array(self.a(angles[0],angles[1])),[1,0,0])
-		s_prime=rotT(self.smat,g)
-		return 1.0/s_prime[1,1,1,1]
-
 	def show_dir_youngs_modulus(self,angles):
 		if len(angles) != 0:
 			angles=[float(ang) for ang in angles]
@@ -840,15 +834,13 @@ class elast_consts:
 		e=open("e.dat",'w')
 		p=np.linspace(0,2*np.pi,npt)
 		t=np.linspace(0,np.pi,npt)
-		ranges = [p, t]
-		for theta, phi in product(*ranges):
-			r=self.dir_youngs_moduli([theta,phi])
-			e.write("%6.4f %6.4f %6.4f %6.4f\n" % (r*np.sin(theta)*np.cos(phi),r*np.sin(theta)*np.sin(phi),r*np.cos(theta),r))
+		theta,phi=np.meshgrid(t,p)
+		r=self.dir_youngs_moduli([theta,phi])
 		e.close()
 		print "Complete!"
 
 	def normVect(self,vect):
-	    return (np.array(vect)/np.linalg.norm(vect))
+		return vect/np.linalg.norm(vect,axis=1).reshape(vect.shape[0],1)
 	
 	def skew(self,vector):
 		vector = np.array(vector)
@@ -856,17 +848,15 @@ class elast_consts:
 		                     [vector.item(2), 0, -vector.item(0)],
 		                     [-vector.item(1), vector.item(0), 0]])
 	def getRotMat(self,a,b):
-	    a=self.normVect(a)
-	    b=self.normVect(b)
-	    v=np.cross(a,b)
-	    s=np.linalg.norm(v)
-	    c=np.dot(a,b)
-	    vx=self.skew(v)
-	    return np.identity(3)+vx+np.dot(vx,vx)*(1-c)/s**2
+		v=np.cross(a,b)
+		s=np.linalg.norm(v)
+		c=np.dot(a,b)
+		vx=self.skew(v)
+		return np.identity(3)+vx+np.dot(vx,vx)*(1-c)/s**2
 
 	def rotSmat(self,vectProj,vectUp):
-		vectProj=self.normVect(vectProj)
-		vectUp=self.normVect(vectUp)
+		vectProj=vectProj/np.linalg.norm(vectProj)
+		vectUp=vectUp/np.linalg.norm(vectUp)
 		vectPlot=np.array([0,0,1])
 		#g rotation matrix from projection vector -> vector perpendicular to the plane for plotting
 		g=self.getRotMat(vectProj,vectPlot)
@@ -876,6 +866,14 @@ class elast_consts:
 		g2=self.getRotMat(b2,[0,1,0])
 		self.smat=self.rotT(self.smat,g2)
 
+	def dir_youngs_moduli2(self,angles):
+		theta,phi = angles
+		a=np.array(self.a(theta,phi))
+		
+		g=self.getRotMat(a,[[1,0,0]]*200)
+		s_prime=rotT(self.smat,g)
+		return 1.0/s_prime[1,1,1,1]
+
 	def calc_dir_youngs_modulus_plane(self,vectProj,vectUp):
 		#vectProj->projection vector
 		#vectUp->upward vector
@@ -883,9 +881,13 @@ class elast_consts:
 		npt=self.npt
 		print "\nCalculating projections of Young's modulus along ",vectProj,' vector'
 		t0=time()
+		vectProj=np.array(vectProj)
+		vectUp=np.array(vectUp)
 		self.rotSmat(vectProj,vectUp)
-		phi = np.linspace(0,2*np.pi,200)
-		y=self.dir_youngs_moduli2([np.pi/2,phi])
+		p = np.linspace(0,2*np.pi,200)
+		t = np.pi/2
+		theta,phi=np.meshgrid(t,p)
+		y=self.dir_youngs_moduli2([theta,phi])
 		print time()-t0
 		ax = plt.subplot(111, projection='polar')
 		ax.plot(phi, y, color='r', linewidth=3)
