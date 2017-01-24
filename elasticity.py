@@ -839,32 +839,33 @@ class elast_consts:
 		e.close()
 		print "Complete!"
 
-	def normVect(self,vect):
-		return vect/np.linalg.norm(vect,axis=1).reshape(vect.shape[0],1)
+	def rotSmat(self,vectProj,vectUp):
+		def getRotMat(self,a,b):
+			v=np.cross(a,b)
+			s=np.linalg.norm(v)
+			c=np.dot(a,b)
+			vx=skew(v)
+			return np.identity(3)+vx+np.dot(vx,vx)*(1-c)/s**2
+		
+		def normVect(self,vect):
+			return vect/np.linalg.norm(vect,axis=1).reshape(vect.shape[0],1)
 	
-	def skew(self,vector):
-		vector = np.array(vector)
-		return np.array([[0, -vector.item(2), vector.item(1)],
+		def skew(self,vector):
+			vector = np.array(vector)
+			return np.array([[0, -vector.item(2), vector.item(1)],
 		                     [vector.item(2), 0, -vector.item(0)],
 		                     [-vector.item(1), vector.item(0), 0]])
-	def getRotMat(self,a,b):
-		v=np.cross(a,b)
-		s=np.linalg.norm(v)
-		c=np.dot(a,b)
-		vx=self.skew(v)
-		return np.identity(3)+vx+np.dot(vx,vx)*(1-c)/s**2
 
-	def rotSmat(self,vectProj,vectUp):
 		vectProj=vectProj/np.linalg.norm(vectProj)
 		vectUp=vectUp/np.linalg.norm(vectUp)
 		vectPlot=np.array([0,0,1])
 		#g rotation matrix from projection vector -> vector perpendicular to the plane for plotting
 		g=self.getRotMat(vectProj,vectPlot)
-		self.smat=self.rotT(self.smat,g)
+		self.smat=rotT(self.smat,g)
 		b2=np.dot(g,vectUp)
 		#g2 rotation matrix from upward vector -> [0,1,0] (y-axis for plotting)
 		g2=self.getRotMat(b2,[0,1,0])
-		self.smat=self.rotT(self.smat,g2)
+		self.smat=rotT(self.smat,g2)
 
 	def dir_youngs_moduli2(self,angles):
 		theta,phi = angles
@@ -874,7 +875,7 @@ class elast_consts:
 		s_prime=rotT(self.smat,g)
 		return 1.0/s_prime[1,1,1,1]
 
-	def calc_dir_youngs_modulus_plane(self,vectProj,vectUp):
+	def calc_dir_youngs_modulus_plane(self,vectProj=[0,0,1],vectUp=[0,1,0]):
 		#vectProj->projection vector
 		#vectUp->upward vector
 		#vectPlot->vector perpendicular to the plane for plotting [0,0,1]
